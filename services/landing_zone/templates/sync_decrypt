@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+
+function get_ssm_param() {
+  /usr/local/bin/aws ssm get-parameter --name "$1" --with-decryption | jq --raw-output '.Parameter.Value'
+}
+
+DECRYPT_DIR=/data/decrypt
+LOG_DIR=/var/log/coretechs
+
+function log() {
+  msg="[$(date "+%Y-%m-%d %H:%M:%S")] $@"
+  echo $msg
+}
+
+function filesize() {
+  du -sh "$1" | cut -f1
+}
+
+function filetype() {
+  echo $(file "$1" | cut -d: -f2)
+}
+
+function upload_file() {
+  fullpath="$1"
+  filename="$(basename $fullpath)"
+  date_prefix=$(TZ='US/Eastern' date +%Y-%m-%d)
+
+  cmd="/usr/local/bin/aws s3 cp \"$fullpath\" \"s3://${upload_bucket}/decrypt/$date_prefix/$filename\" --sse"
+  eval $cmd && log "INFO [$file_path] Successfully uploaded to S3" && return 0
+  log "ERROR [$1] Failed to upload to S3" && return 1
+}
+
+file_name=$1
+file_path=$DECRYPT_DIR/$1
+
+log "INFO [$file_path] New file detected (size: $(filesize $file_path), type: $(filetype $file_path))"
+
+upload_file "$file_path" || exit
+
+log "INFO [$file_path] Deleting file"
+rm "$file_path"

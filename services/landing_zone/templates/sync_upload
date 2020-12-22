@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+
+UPLOAD_DIR=/data/upload
+DECRYPT_DIR=/data/decrypt
+LOG_DIR=/var/log/coretechs
+SCRIPT_DIR=/opt/landingzone
+
+function get_ssm_param() {
+  /usr/local/bin/aws ssm get-parameter --name "$1" --with-decryption | jq --raw-output '.Parameter.Value'
+}
+
+function log() {
+  msg="[$(date "+%Y-%m-%d %H:%M:%S")] $@"
+  echo $msg
+  # echo $msg >> $LOG_DIR/landingzone.log
+}
+
+function filesize() {
+  du -sh "$1" | cut -f1
+}
+
+function filetype() {
+  echo $(file "$1" | cut -d: -f2)
+}
+
+function is_encrypted() {
+  echo $(filetype $1) | grep 'encrypted' --quiet && log "INFO [$1] Encrypted file detected"
+}
+
+function decrypt_file() {
+  file_path=$1
+  output_path=$DECRYPT_DIR/$(basename $file_path)
+  ## Register PGP keys
+  gpg --import $PGP_KEY_PATH
+  cmd="echo \$(get_ssm_param pgp-passphrase) | gpg --batch --passphrase-fd 0 --output \"$output_path\" --decrypt \"$file_path\""
+  eval $cmd && log "INFO [$1] Successfully decrypted file" && return 0
+  log "ERROR [$1] Failed to decrypt file" && return 1
+}
+
+function upload_file() {
+  fullpath="$1"
+  filename="$(basename $fullpath)"
+  date_prefix=$(TZ='US/Eastern' date +%Y-%m-%d)
+
+  cmd="/usr/local/bin/aws s3 cp \"$fullpath\" \"s3://${upload_bucket}/$date_prefix/$filename\" --sse"
+  eval $cmd && log "INFO [$file_path] Successfully uploaded to S3" && return 0
+  log "ERROR [$1] Failed to upload to S3" && return 1
+}
+
+PGP_KEY_PATH=$SCRIPT_DIR/coretechs.secret.key
+/usr/local/bin/aws s3 cp s3://${main_bucket}/config/coretechs.secret.key $PGP_KEY_PATH
+
+file_name=$1
+file_path=$UPLOAD_DIR/$1
+
+log "INFO [$file_path] New file detected (size: $(filesize $file_path), type: $(filetype $file_path))"
+
+upload_file "$file_path" || exit
+
+if is_encrypted $file_path; then
+  decrypt_file $file_path || exit
+fi
+
+log "INFO [$file_path] Deleting file"
+rm "$file_path"

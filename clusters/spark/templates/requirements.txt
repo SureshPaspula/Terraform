@@ -1,0 +1,15 @@
+PyMySQL
+SQLAlchemy
+mongoengine
+numpy
+pandas
+sqlalchemy-migrate
+xmltodict
+recordlinkage
+gensim
+spacy
+scispacy
+nltk
+transformers
+thinc
+git+https://github.com/gma-coretechs/spark-df-profiling

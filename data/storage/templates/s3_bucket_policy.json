@@ -1,0 +1,72 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "Deny-Access-to-delete-objects",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:DeleteObject",
+      "Resource": "arn:aws:s3:::${s3_bucket}/*"
+    },
+    {
+      "Sid": "Deny-Access-to-write-to-unauthorized-IAM-roles",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::${s3_bucket}/*",
+      "Condition": {
+        "StringNotLike": {
+          "aws:userId": "${iam_aws_user_id}:*"
+        }
+      }
+    },
+    {
+      "Sid": "Deny-Access-to-non-specified-VPC-Endpoint",    
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": "arn:aws:s3:::${s3_bucket}/*",
+      "Condition": {
+        "StringNotEquals": {
+          "aws:sourceVpce": "${s3_vpc_endpoint}"
+        }
+      }
+    },
+    {
+      "Sid": "DenyIncorrectEncryptionHeader",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::${s3_bucket}/*",
+      "Condition": {
+        "StringNotEquals": {
+          "s3:x-amz-server-side-encryption": "AES256"
+        }
+      }
+    },
+    {
+      "Sid": "DenyUnEncryptedObjectUploads",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::${s3_bucket}/*",
+      "Condition": {
+        "Null": {
+          "s3:x-amz-server-side-encryption": "true"
+        }
+      }
+    },
+    {
+      "Sid": "DenyNonHTTPSRequests",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": "arn:aws:s3:::${s3_bucket}/*",
+      "Condition": {
+        "Bool": {
+          "aws:SecureTransport": "false"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+aws eks --region ${aws_region} update-kubeconfig --name ${eks_cluster_name}
+
+if ! kubectl config current-context | grep "${eks_cluster_name}"; then
+  echo "kubectl context doesn't match current deployment: ${eks_cluster_name}"
+  kubectl config current-context
+  exit
+fi

@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+PATH=/usr/local/bin:$PATH
+
+LOG_DIR=/var/log/coretechs
+SCRIPT_DIR=/opt/coretechs-lz
+UPLOAD_DIR=/data/upload
+DOWNLOAD_DIR=/data/download
+
+## Script to initialize user in SFTP docker container
+cat > $SCRIPT_DIR/sftp_init.sh << 'EOS'
+#!/usr/bin/env bash
+function bindmount() {
+  if [ -d "$1" ]; then
+      mkdir -p "$2"
+  fi
+  mount --bind $3 "$1" "$2"
+}
+
+# Remember permissions, you may have to fix them:
+chmod 777 /data/upload
+chmod 744 /data/download
+
+for user_home in /home/* ; do
+  if [ -d "$user_home" ] ; then
+    username=`basename $user_home`
+    bindmount /data/upload /home/$username/upload
+    bindmount /data/download /home/$username/download --read-only
+  fi
+done
+EOS
+chmod +x $SCRIPT_DIR/sftp_init.sh
+
+# NOTE: To avoid warnings for Man-in-the-Middle attacks upon redeployments, we
+# can fetch the SSH Host keys from S3 bucket
+# ssh-keygen -t ed25519 -f $SCRIPT_DIR/ssh_host_ed25519_key -N '' < /dev/null
+# ssh-keygen -t rsa -b 4096 -f $SCRIPT_DIR/ssh_host_rsa_key -N '' < /dev/null
+aws s3 cp s3://${main_bucket}/config/ssh_host_ed25519_key $SCRIPT_DIR/ssh_host_ed25519_key
+aws s3 cp s3://${main_bucket}/config/ssh_host_rsa_key $SCRIPT_DIR/ssh_host_rsa_key
+chmod 400 $SCRIPT_DIR/ssh_host_ed25519_key
+chmod 400 $SCRIPT_DIR/ssh_host_rsa_key
+
+sftp_username=${sftp_username}
+sftp_password=$(get_ssm_param sftp-password)
+
+cat > $SCRIPT_DIR/users.conf << EOS
+$sftp_username:$sftp_password
+EOS
+
+docker_login
+docker stop sftp_server
+docker run \
+  -d \
+  --rm \
+  --name sftp_server \
+  --cap-add=SYS_ADMIN \
+  -p ${sftp_port}:22 \
+  -v $SCRIPT_DIR/ssh_host_ed25519_key:/etc/ssh/ssh_host_ed25519_key \
+  -v $SCRIPT_DIR/ssh_host_rsa_key:/etc/ssh/ssh_host_rsa_key \
+  -v $SCRIPT_DIR/users.conf:/etc/sftp/users.conf:ro \
+  -v $SCRIPT_DIR/sftp_init.sh:/etc/sftp.d/init.sh:ro \
+  -v /var/log/sftp_server:/var/log \
+  -v /data:/data \
+  --log-driver=fluentd \
+  --log-opt tag="docker.sftp" \
+  graymatteranalytics/sftp:latest

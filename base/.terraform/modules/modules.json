@@ -1,0 +1,1 @@
+{"Modules":[{"Key":"acm","Source":"terraform-aws-modules/acm/aws","Version":"2.12.0","Dir":".terraform/modules/acm"},{"Key":"","Source":"","Dir":"."}]}
